@@ -25,7 +25,7 @@
        (when (< (/ r 10000) index)
 	   conseq)))))
 
-(define (random-form operators variables #!optional (max-depth 4))
+(define (random-form operators variables #!optional (max-depth 10))
   (let ((operand (lambda ()
 		   (random-if (if (> max-depth 0) 1/2 0)
 			      (random-form operators variables (- max-depth 1))
@@ -53,49 +53,42 @@
 		       0)))
 	       test-inputs)))
 
-(define (random-node form)
-  (if (list? form)
-      (random-if 1/3  form
-		 (random-if 1/2
-			    (cadr form)
-			    (caddr form)))
-      form))
-
-(define (replace-random-node form new-node)
-  (if (list? form)
-      (random-if 1/3  new-node
-		 (random-if 1/2
-			    (list (car form)
-				  (replace-random-node (cadr form) new-node)
-				  (caddr form))
-			    (list (car form)
-				  (cadr form)
-				  (replace-random-node (caddr form) new-node))))
-      (random-if 1/2 form new-node)))
-
-
 (define (random-node-split form #!optional (cont (lambda (node) node)))
+  (handle-exceptions
+   exn (begin (print "AN ERROR")  (format #t "ERROR RANDOM-NODE-SPLIT: ~%~A~%~A~%" exn form) exn)
+
   (if (list? form)
       (random-if 1/3 (cons form cont)
 		 (random-if 1/2
-			    (random-node-split (cadr form) (lambda (node)
-							    (cont
-							     (list (car form)
-								   node
-								   (caddr form)))))
+			    (random-node-split
+			     (cadr form)
+			     (lambda (node)
+			       (cont
+				(list (car form)
+				      node
+				      (caddr form)))))
 
-			    (random-node-split (caddr form) (lambda (node)
-							     (cont
-							      (list (car form)
-								    (cadr form)
-								    node))))))
-      (cons form cont)))
+			    (random-node-split
+			     (caddr form)
+			     (lambda (node)
+			       (cont
+				(list (car form)
+				      (cadr form)
+				      node))))))
+      (cons form cont))))
 
 (define (cross-over form1 form2)
+    (handle-exceptions
+     exn (begin
+	   (format #t "ERROR CROSS-OVER: ~%~A~%~A" form1 form2)
+	   (display
+	    ((condition-property-accessor 'exn 'message) exn))
+	   exn)
+
   (let ((split1 (random-node-split form1))
 	(split2 (random-node-split form2)))
-    (list ((cdr split1) (car split2))
-	  ((cdr split2) (car split1)))))
+    (cons ((cdr split1) (car split2))
+	  ((cdr split2) (car split1))))))
 
 (define (mutate form operators variables)
   (let ((split (random-node-split form))
@@ -109,8 +102,10 @@
 	population)
    (lambda (a b) (> (car a) (car b)))))
 
-(define (advance-generation population operators variables fitness-fn test-inputs #!optional (max-population 10))
+(define (advance-generation population operators variables fitness-fn test-inputs
+			    #!optional (max-population 100))
   (let ((epop (evaluate-population population variables fitness-fn test-inputs)))
+    (format #t "BEST: ~A~%" (car (car epop)))
     (fold (lambda (f accum)
 	    (let ((fitness (car f))
 		  (form (cdr f)))
@@ -146,7 +141,7 @@
 	       (advance-generation pop operators variables fitness-fn test-inputs))
 	(evaluate-population pop variables fitness-fn test-inputs))))
 
-(define population (initial-population (*operators*) (*variables*) 20))
+(define population (initial-population (*operators*) (*variables*) 100))
 
 (define (test-evaluate pop)
   (evaluate-population pop (*variables*)
@@ -159,6 +154,20 @@
 		      '((1) (2) (3))))
 
 (define (test n)
- (run population (*operators*) (*variables*)
-		      (lambda (xl) (* (car xl) 10))
+  (run  (initial-population (*operators*) (*variables*) 100)
+	(*operators*) (*variables*)
+		      (lambda (xl) (* (+  (* 3 (car xl)) (car xl) (car xl))))
 		      '((1) (2) (3)) n 10))
+
+(define (test-form)
+   (random-form (*operators*) (*variables*)))
+
+(define (test-crossover n)
+  (let recur ((n n)
+	      (t1 (test-form))
+	      (t2 (test-form)))
+    (if (> n 0)
+	(let ((crosses (cross-over t1 t2)))
+	  (map print crosses) (newline)
+	  (recur (- n 1) (car crosses) (cdr crosses)))
+	'done)))
