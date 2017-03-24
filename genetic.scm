@@ -1,8 +1,18 @@
 (use srfi-1)
 
-(define *operators* (make-parameter '(* + - /)))
+(define *operators* (make-parameter
+		     (lambda ()
+		       (random-elt '(* + - /)))))
+
+(define math-operators
+  (lambda ()
+    (random-elt '(* + - /))))
 
 (define *variables* (make-parameter '(x)))
+
+(define *leaves* (make-parameter
+		  (lambda ()
+		    (random 10))))
 
 (define (random-elt seq)
   (when (not (null? seq))
@@ -25,13 +35,16 @@
        (when (< (/ r 10000) index)
 	   conseq)))))
 
-(define (random-form operators variables #!optional (max-depth 10))
+(define (random-form operators variables #!optional (leaves (*leaves*)) (max-depth 10))
   (let ((operand (lambda ()
 		   (random-if (if (> max-depth 0) 1/2 0)
-			      (random-form operators variables (- max-depth 1))
-			      (random-if 1/2 (random 10)
+			      (random-form operators variables leaves (- max-depth 1))
+			      (random-if (if (> (length variables) 0)
+					     1/2
+					     1)
+					 (leaves)
 					 (random-elt variables))))))
-       (list (random-elt operators) (operand) (operand))))
+       (list (operators) (operand) (operand))))
 
 
 ;; do this with syntax rules?
